@@ -1,6 +1,9 @@
 {
   "name": "afri-calories-backend",
   "version": "1.0.0",
+  "engines": {
+    "node": "18.x"
+  },
   "description": "API Backend pour l'application de suivi de calories africaines",
   "main": "src/server.js",
   "scripts": {
