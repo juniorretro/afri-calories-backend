@@ -1,10 +1,10 @@
 // src/routes/food.routes.js
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { body, validationResult } = require('express-validator');
+const prisma = require('../lib/prisma');
 const { authenticate } = require('../middleware/auth.middleware');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // GET /api/foods - Liste tous les plats
 router.get('/', authenticate, async (req, res, next) => {
@@ -74,14 +74,38 @@ router.get('/:id', authenticate, async (req, res, next) => {
   }
 });
 
-// POST /api/foods - Créer un plat (admin)
-router.post('/', authenticate, async (req, res, next) => {
-  try {
-    const food = await prisma.food.create({ data: req.body });
-    res.status(201).json(food);
-  } catch (err) {
-    next(err);
+// POST /api/foods - Créer un plat (validé et sanitisé)
+router.post(
+  '/',
+  authenticate,
+  [
+    body('name').trim().isLength({ min: 2, max: 100 }),
+    body('category').trim().notEmpty(),
+    body('caloriesPer100g').isFloat({ min: 0, max: 9000 }),
+    body('proteins').optional().isFloat({ min: 0, max: 100 }),
+    body('carbs').optional().isFloat({ min: 0, max: 100 }),
+    body('fats').optional().isFloat({ min: 0, max: 100 }),
+    body('fiber').optional().isFloat({ min: 0, max: 100 }),
+    body('country').optional().trim().isLength({ max: 60 }),
+    body('description').optional().trim().isLength({ max: 500 }),
+  ],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { name, nameFr, category, caloriesPer100g, proteins, carbs, fats, fiber, country, description, imageUrl } = req.body;
+
+      const food = await prisma.food.create({
+        data: { name, nameFr, category, caloriesPer100g, proteins, carbs, fats, fiber, country, description, imageUrl },
+      });
+      res.status(201).json(food);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 module.exports = router;

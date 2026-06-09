@@ -1,33 +1,27 @@
 // src/routes/meal.routes.js
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../lib/prisma');
 const { authenticate } = require('../middleware/auth.middleware');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
-// Calcul calories: quantité * calories_per_100g / 100
 const calculateCalories = (quantityGrams, caloriesPer100g) => {
   return (quantityGrams * caloriesPer100g) / 100;
 };
 
 const enrichMeal = (meal) => {
   const enrichedItems = meal.items.map((item) => {
-    const calories = calculateCalories(
-      item.quantityGrams,
-      item.food.caloriesPer100g
-    );
+    const calories = calculateCalories(item.quantityGrams, item.food.caloriesPer100g);
     const proteins = (item.quantityGrams * item.food.proteins) / 100;
-    const carbs = (item.quantityGrams * item.food.carbs) / 100;
-    const fats = (item.quantityGrams * item.food.fats) / 100;
-
+    const carbs    = (item.quantityGrams * item.food.carbs) / 100;
+    const fats     = (item.quantityGrams * item.food.fats) / 100;
     return { ...item, calories, proteins, carbs, fats };
   });
 
   const totalCalories = enrichedItems.reduce((sum, i) => sum + i.calories, 0);
   const totalProteins = enrichedItems.reduce((sum, i) => sum + i.proteins, 0);
-  const totalCarbs = enrichedItems.reduce((sum, i) => sum + i.carbs, 0);
-  const totalFats = enrichedItems.reduce((sum, i) => sum + i.fats, 0);
+  const totalCarbs    = enrichedItems.reduce((sum, i) => sum + i.carbs, 0);
+  const totalFats     = enrichedItems.reduce((sum, i) => sum + i.fats, 0);
 
   return {
     ...meal,
@@ -35,8 +29,8 @@ const enrichMeal = (meal) => {
     totals: {
       calories: Math.round(totalCalories),
       proteins: Math.round(totalProteins * 10) / 10,
-      carbs: Math.round(totalCarbs * 10) / 10,
-      fats: Math.round(totalFats * 10) / 10,
+      carbs:    Math.round(totalCarbs * 10) / 10,
+      fats:     Math.round(totalFats * 10) / 10,
     },
   };
 };
@@ -45,7 +39,6 @@ const enrichMeal = (meal) => {
 router.get('/', authenticate, async (req, res, next) => {
   try {
     const { date, startDate, endDate } = req.query;
-
     const where = { userId: req.userId };
 
     if (date) {
@@ -59,16 +52,11 @@ router.get('/', authenticate, async (req, res, next) => {
 
     const meals = await prisma.meal.findMany({
       where,
-      include: {
-        items: {
-          include: { food: true },
-        },
-      },
+      include: { items: { include: { food: true } } },
       orderBy: { date: 'desc' },
     });
 
-    const enrichedMeals = meals.map(enrichMeal);
-    res.json(enrichedMeals);
+    res.json(meals.map(enrichMeal));
   } catch (err) {
     next(err);
   }
@@ -83,37 +71,21 @@ router.get('/today/summary', authenticate, async (req, res, next) => {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     const meals = await prisma.meal.findMany({
-      where: {
-        userId: req.userId,
-        date: { gte: today, lt: tomorrow },
-      },
-      include: {
-        items: { include: { food: true } },
-      },
+      where: { userId: req.userId, date: { gte: today, lt: tomorrow } },
+      include: { items: { include: { food: true } } },
     });
 
     const enrichedMeals = meals.map(enrichMeal);
 
-    const summary = {
+    res.json({
       date: today.toISOString().split('T')[0],
       meals: enrichedMeals,
-      totalCalories: enrichedMeals.reduce(
-        (sum, m) => sum + m.totals.calories,
-        0
-      ),
-      totalProteins: Math.round(
-        enrichedMeals.reduce((sum, m) => sum + m.totals.proteins, 0) * 10
-      ) / 10,
-      totalCarbs: Math.round(
-        enrichedMeals.reduce((sum, m) => sum + m.totals.carbs, 0) * 10
-      ) / 10,
-      totalFats: Math.round(
-        enrichedMeals.reduce((sum, m) => sum + m.totals.fats, 0) * 10
-      ) / 10,
+      totalCalories: enrichedMeals.reduce((sum, m) => sum + m.totals.calories, 0),
+      totalProteins: Math.round(enrichedMeals.reduce((sum, m) => sum + m.totals.proteins, 0) * 10) / 10,
+      totalCarbs:    Math.round(enrichedMeals.reduce((sum, m) => sum + m.totals.carbs, 0) * 10) / 10,
+      totalFats:     Math.round(enrichedMeals.reduce((sum, m) => sum + m.totals.fats, 0) * 10) / 10,
       mealCount: enrichedMeals.length,
-    };
-
-    res.json(summary);
+    });
   } catch (err) {
     next(err);
   }
@@ -126,7 +98,6 @@ router.get('/:id', authenticate, async (req, res, next) => {
       where: { id: req.params.id, userId: req.userId },
       include: { items: { include: { food: true } } },
     });
-
     if (!meal) return res.status(404).json({ error: 'Meal not found' });
     res.json(enrichMeal(meal));
   } catch (err) {
@@ -143,11 +114,8 @@ router.post('/', authenticate, async (req, res, next) => {
       return res.status(400).json({ error: 'Meal must have at least one item' });
     }
 
-    // Validate food IDs exist
     const foodIds = items.map((i) => i.foodId);
-    const foods = await prisma.food.findMany({
-      where: { id: { in: foodIds } },
-    });
+    const foods = await prisma.food.findMany({ where: { id: { in: foodIds } } });
     if (foods.length !== foodIds.length) {
       return res.status(400).json({ error: 'One or more food items not found' });
     }
@@ -184,7 +152,6 @@ router.put('/:id', authenticate, async (req, res, next) => {
     });
     if (!existing) return res.status(404).json({ error: 'Meal not found' });
 
-    // Delete old items and recreate
     await prisma.mealItem.deleteMany({ where: { mealId: req.params.id } });
 
     const meal = await prisma.meal.update({
@@ -228,8 +195,12 @@ router.delete('/:id', authenticate, async (req, res, next) => {
 router.post('/sync', authenticate, async (req, res, next) => {
   try {
     const { meals: localMeals } = req.body;
-    const created = [];
 
+    if (!Array.isArray(localMeals)) {
+      return res.status(400).json({ error: 'meals must be an array' });
+    }
+
+    const created = [];
     for (const localMeal of localMeals) {
       try {
         const meal = await prisma.meal.create({

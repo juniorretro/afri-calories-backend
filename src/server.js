@@ -13,14 +13,18 @@ const { errorHandler } = require('./middleware/error.middleware');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(cors());
+// CORS — restreindre les origines en production via ALLOWED_ORIGINS
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  : '*';
+
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 app.use(morgan('dev'));
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'AfriCalories API is running 🌍' });
+  res.json({ status: 'ok', message: 'VitaFlow API is running 💚' });
 });
 
 // Routes
@@ -38,7 +42,7 @@ app.use('*', (req, res) => {
 app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`🚀 AfriCalories API running on port ${PORT}`);
+  console.log(`🚀 VitaFlow API running on port ${PORT}`);
   console.log(`📍 Health: http://localhost:${PORT}/health`);
 });
 
